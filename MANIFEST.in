@@ -1,0 +1,10 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+recursive-include titan_telegram *.csv
+recursive-include titan_telegram *.html
+recursive-include titan_telegram *.js
+recursive-include titan_telegram *.json
+recursive-include titan_telegram *.md
+recursive-include titan_telegram *.py
+recursive-exclude titan_telegram *.pyc

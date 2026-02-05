@@ -1,0 +1,87 @@
+{
+  "creation": "2024-01-01 00:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "device_id",
+    "status",
+    "column_break_1",
+    "chat_id",
+    "user_id",
+    "section_break_1",
+    "warehouse",
+    "current_batch",
+    "current_product"
+  ],
+  "fields": [
+    {
+      "fieldname": "device_id",
+      "fieldtype": "Data",
+      "label": "Device ID",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Online\\nOffline\\nBusy\\nError",
+      "default": "Offline"
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "chat_id",
+      "fieldtype": "Data",
+      "label": "Chat ID",
+      "reqd": 1
+    },
+    {
+      "fieldname": "user_id",
+      "fieldtype": "Data",
+      "label": "User ID"
+    },
+    {
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break",
+      "label": "Current State"
+    },
+    {
+      "fieldname": "warehouse",
+      "fieldtype": "Link",
+      "label": "Warehouse",
+      "options": "Warehouse"
+    },
+    {
+      "fieldname": "current_batch",
+      "fieldtype": "Link",
+      "label": "Current Batch",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "current_product",
+      "fieldtype": "Link",
+      "label": "Current Product",
+      "options": "Item"
+    }
+  ],
+  "modified": "2024-01-01 00:00:00.000000",
+  "module": "Titan Telegram",
+  "name": "Telegram Device",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "read": 1,
+      "role": "System Manager",
+      "write": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "device_id",
+  "track_changes": 1
+}

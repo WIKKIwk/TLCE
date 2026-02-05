@@ -1,0 +1,82 @@
+{
+  "creation": "2024-01-01 00:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "device_id",
+    "action",
+    "status",
+    "column_break_1",
+    "batch_id",
+    "product_id",
+    "section_break_1",
+    "message",
+    "error"
+  ],
+  "fields": [
+    {
+      "fieldname": "device_id",
+      "fieldtype": "Data",
+      "label": "Device ID",
+      "reqd": 1
+    },
+    {
+      "fieldname": "action",
+      "fieldtype": "Select",
+      "label": "Action",
+      "options": "start_batch\\nstop_batch\\nselect_product\\nweight_record\\nprint_label\\nerror",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Success\\nError\\nPending",
+      "default": "Pending"
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "batch_id",
+      "fieldtype": "Data",
+      "label": "Batch ID"
+    },
+    {
+      "fieldname": "product_id",
+      "fieldtype": "Data",
+      "label": "Product ID"
+    },
+    {
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "message",
+      "fieldtype": "Text",
+      "label": "Message"
+    },
+    {
+      "fieldname": "error",
+      "fieldtype": "Text",
+      "label": "Error"
+    }
+  ],
+  "modified": "2024-01-01 00:00:00.000000",
+  "module": "Titan Telegram",
+  "name": "Telegram Log",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "read": 1,
+      "role": "System Manager",
+      "write": 1
+    }
+  ],
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "track_changes": 1
+}
