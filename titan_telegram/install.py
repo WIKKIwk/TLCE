@@ -2,6 +2,7 @@
 Installation hooks
 """
 import frappe
+from .workspace_utils import ensure_workspace
 
 def after_install():
     """Create default settings after install"""
@@ -14,3 +15,4 @@ def after_install():
         })
         doc.insert()
         frappe.db.commit()
+    ensure_workspace()

@@ -1,0 +1,88 @@
+{
+  "doctype": "DocType",
+  "name": "LCE Settings",
+  "module": "Titan Telegram",
+  "issingle": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "lce_url",
+    "section_break_erp",
+    "erp_url",
+    "erp_user",
+    "column_break_erp",
+    "erp_api_key",
+    "erp_api_secret",
+    "erp_api_token",
+    "section_break_1",
+    "notes"
+  ],
+  "fields": [
+    {
+      "fieldname": "lce_url",
+      "fieldtype": "Data",
+      "label": "LCE Base URL",
+      "reqd": 0,
+      "default": "http://127.0.0.1:4000",
+      "description": "Default: http://127.0.0.1:4000"
+    },
+    {
+      "fieldname": "section_break_erp",
+      "fieldtype": "Section Break",
+      "label": "ERPNext"
+    },
+    {
+      "fieldname": "erp_url",
+      "fieldtype": "Data",
+      "label": "ERPNext URL",
+      "read_only": 1
+    },
+    {
+      "fieldname": "erp_user",
+      "fieldtype": "Link",
+      "label": "ERP User",
+      "options": "User",
+      "read_only": 1
+    },
+    {
+      "fieldname": "column_break_erp",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "erp_api_key",
+      "fieldtype": "Data",
+      "label": "API Key",
+      "read_only": 1
+    },
+    {
+      "fieldname": "erp_api_secret",
+      "fieldtype": "Password",
+      "label": "API Secret",
+      "read_only": 1
+    },
+    {
+      "fieldname": "erp_api_token",
+      "fieldtype": "Password",
+      "label": "API Token",
+      "read_only": 1
+    },
+    {
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break",
+      "label": "Notes"
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Small Text",
+      "label": "Notes"
+    }
+  ],
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "read": 1,
+      "write": 1,
+      "role": "System Manager"
+    }
+  ]
+}

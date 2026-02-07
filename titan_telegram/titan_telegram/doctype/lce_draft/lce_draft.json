@@ -1,0 +1,82 @@
+{
+  "doctype": "DocType",
+  "name": "LCE Draft",
+  "module": "Titan Telegram",
+  "istable": 0,
+  "custom": 0,
+  "engine": "InnoDB",
+  "autoname": "hash",
+  "title_field": "epc_code",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "track_changes": 1,
+  "field_order": [
+    "device_id",
+    "product_id",
+    "warehouse",
+    "column_break_1",
+    "weight_kg",
+    "epc_code",
+    "status",
+    "section_break_1",
+    "message"
+  ],
+  "fields": [
+    {
+      "fieldname": "device_id",
+      "fieldtype": "Data",
+      "label": "Device ID",
+      "reqd": 1
+    },
+    {
+      "fieldname": "product_id",
+      "fieldtype": "Data",
+      "label": "Product ID"
+    },
+    {
+      "fieldname": "warehouse",
+      "fieldtype": "Data",
+      "label": "Warehouse"
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "weight_kg",
+      "fieldtype": "Float",
+      "label": "Weight (kg)"
+    },
+    {
+      "fieldname": "epc_code",
+      "fieldtype": "Data",
+      "label": "EPC",
+      "unique": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Draft\nPrinted\nError",
+      "default": "Draft"
+    },
+    {
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "message",
+      "fieldtype": "Text",
+      "label": "Message"
+    }
+  ],
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "read": 1,
+      "write": 1,
+      "role": "System Manager"
+    }
+  ]
+}
