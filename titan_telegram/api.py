@@ -4,6 +4,7 @@ API Endpoints for Telegram Bot Integration
 import frappe
 from frappe import _
 import json
+import re
 import requests
 from frappe.utils import now_datetime, add_to_date
 from frappe.core.doctype.user.user import generate_keys
@@ -308,6 +309,194 @@ def detect_lce_url():
     except Exception as e:
         frappe.log_error(f"Detect LCE URL error: {str(e)}")
         return {"ok": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_items=1, only_with_epc=1):
+    """
+    Ultra-fast endpoint for RFID draft cache.
+
+    Returns open Stock Entry drafts (docstatus=0) with EPC candidates from:
+    - Stock Entry Item.barcode
+    - Stock Entry Item.batch_no
+    - Stock Entry Item.serial_no (split by whitespace/comma/newline)
+
+    Args:
+        modified_since (str|None): Optional cursor; returns drafts modified >= this value.
+        limit (int): Max SQL rows returned (capped for safety).
+        include_items (int|bool): 1 to include item rows in response, 0 for compact mode.
+        only_with_epc (int|bool): 1 to return only drafts/items that have EPC fields.
+    """
+    try:
+        row_limit = int(limit or 5000)
+    except Exception:
+        row_limit = 5000
+
+    row_limit = max(1, min(row_limit, 20000))
+    include_items_flag = str(include_items).strip().lower() not in ("0", "false", "no")
+    only_with_epc_flag = str(only_with_epc).strip().lower() not in ("0", "false", "no")
+    modified_since = (modified_since or "").strip() or None
+
+    conditions = ["se.docstatus = 0"]
+    params = {"limit": row_limit}
+
+    if modified_since:
+        conditions.append("se.modified >= %(modified_since)s")
+        params["modified_since"] = modified_since
+
+    if only_with_epc_flag:
+        conditions.append(
+            "(COALESCE(sed.barcode, '') != '' OR COALESCE(sed.batch_no, '') != '' OR COALESCE(sed.serial_no, '') != '')"
+        )
+
+    where_clause = " AND ".join(conditions)
+
+    rows = frappe.db.sql(
+        f"""
+        SELECT
+            se.name,
+            se.modified,
+            se.posting_date,
+            se.posting_time,
+            se.purpose,
+            se.from_warehouse,
+            se.to_warehouse,
+            se.remarks,
+            sed.idx,
+            sed.item_code,
+            sed.qty,
+            sed.s_warehouse,
+            sed.t_warehouse,
+            sed.barcode,
+            sed.batch_no,
+            sed.serial_no
+        FROM `tabStock Entry` se
+        LEFT JOIN `tabStock Entry Detail` sed
+            ON sed.parent = se.name
+           AND sed.parenttype = 'Stock Entry'
+           AND sed.parentfield = 'items'
+        WHERE {where_clause}
+        ORDER BY se.modified DESC, se.name DESC, sed.idx ASC
+        LIMIT %(limit)s
+        """,
+        params,
+        as_dict=True,
+    )
+
+    drafts_map = {}
+    max_modified = None
+
+    for row in rows:
+        name = row.get("name")
+        if not name:
+            continue
+
+        draft = drafts_map.get(name)
+        if not draft:
+            draft = {
+                "name": name,
+                "modified": row.get("modified"),
+                "posting_date": row.get("posting_date"),
+                "posting_time": row.get("posting_time"),
+                "purpose": row.get("purpose"),
+                "from_warehouse": row.get("from_warehouse"),
+                "to_warehouse": row.get("to_warehouse"),
+                "remarks": row.get("remarks"),
+                "epcs": [],
+                "items": [],
+            }
+            drafts_map[name] = draft
+
+        if row.get("modified"):
+            modified = str(row.get("modified"))
+            if max_modified is None or modified > max_modified:
+                max_modified = modified
+
+        item = {
+            "item_code": row.get("item_code"),
+            "qty": float(row.get("qty") or 0),
+            "s_warehouse": row.get("s_warehouse"),
+            "t_warehouse": row.get("t_warehouse"),
+            "barcode": (row.get("barcode") or "").strip(),
+            "batch_no": (row.get("batch_no") or "").strip(),
+            "serial_no": (row.get("serial_no") or "").strip(),
+        }
+
+        if item["item_code"] and include_items_flag:
+            draft["items"].append(item)
+
+        if item["item_code"]:
+            draft["epcs"].extend(_extract_item_epcs(item))
+
+    drafts = []
+    total_epcs = 0
+
+    for draft in drafts_map.values():
+        seen = set()
+        uniq_epcs = []
+
+        # remarks fallback (some setups store EPC in remarks)
+        remark_epc = _extract_epc_from_remarks(draft.get("remarks"))
+        if remark_epc:
+            draft["epcs"].append(remark_epc)
+
+        for epc in draft["epcs"]:
+            normalized = _normalize_epc_value(epc)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                uniq_epcs.append(normalized)
+
+        draft["epcs"] = uniq_epcs
+        draft.pop("remarks", None)
+        total_epcs += len(uniq_epcs)
+        drafts.append(draft)
+
+    return {
+        "ok": True,
+        "count_drafts": len(drafts),
+        "count_epcs": total_epcs,
+        "max_modified": max_modified,
+        "drafts": drafts,
+    }
+
+
+def _extract_item_epcs(item):
+    candidates = []
+
+    barcode = (item.get("barcode") or "").strip()
+    batch_no = (item.get("batch_no") or "").strip()
+    serial_no = item.get("serial_no") or ""
+
+    if barcode:
+        candidates.append(barcode)
+    if batch_no:
+        candidates.append(batch_no)
+
+    candidates.extend(_split_serial_values(serial_no))
+    return candidates
+
+
+def _split_serial_values(serial_value):
+    text = (serial_value or "").strip()
+    if not text:
+        return []
+
+    # ERP serial_no may contain multiple values separated by commas/spaces/newlines
+    return [part.strip() for part in re.split(r"[\s,]+", text) if part.strip()]
+
+
+def _extract_epc_from_remarks(remarks):
+    text = (remarks or "").upper()
+    if not text:
+        return None
+
+    match = re.search(r"\b([0-9A-F]{12,})\b", text)
+    return match.group(1) if match else None
+
+
+def _normalize_epc_value(value):
+    text = (value or "").strip().upper()
+    return re.sub(r"[^0-9A-F]", "", text)
 
 
 def _normalize_key_secret(api_key, api_secret):
