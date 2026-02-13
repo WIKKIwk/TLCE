@@ -460,6 +460,65 @@ def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_it
     }
 
 
+@frappe.whitelist()
+def submit_open_stock_entry_by_epc(epc):
+    """
+    Submit open Stock Entry by EPC in one ERP-side operation.
+
+    Flow:
+      1) Find Stock Entry (docstatus=0) by EPC in barcode/batch_no/serial_no
+      2) Submit that document
+      3) Return compact result for bot
+    """
+    epc = _normalize_epc_value(epc)
+    if not epc:
+        return {"ok": False, "error": "epc_required"}
+
+    # Keep search strict to OPEN drafts only.
+    # serial_no may contain multiple EPCs separated by commas/newlines/spaces.
+    rows = frappe.db.sql(
+        """
+        SELECT se.name, se.modified
+        FROM `tabStock Entry` se
+        INNER JOIN `tabStock Entry Detail` sed
+            ON sed.parent = se.name
+           AND sed.parenttype = 'Stock Entry'
+           AND sed.parentfield = 'items'
+        WHERE se.docstatus = 0
+          AND (
+            UPPER(REPLACE(COALESCE(sed.barcode, ''), ' ', '')) = %(epc)s
+            OR UPPER(REPLACE(COALESCE(sed.batch_no, ''), ' ', '')) = %(epc)s
+            OR UPPER(COALESCE(sed.serial_no, '')) LIKE %(serial_like)s
+          )
+        ORDER BY se.modified DESC, se.name DESC
+        LIMIT 1
+        """,
+        {"epc": epc, "serial_like": f"%{epc}%"},
+        as_dict=True,
+    )
+
+    if not rows:
+        return {"ok": True, "status": "not_found", "epc": epc}
+
+    name = rows[0]["name"]
+
+    try:
+        doc = frappe.get_doc("Stock Entry", name)
+
+        # Race-safe check: it could have been submitted by another worker already.
+        if int(doc.docstatus or 0) != 0:
+            return {"ok": True, "status": "not_found", "epc": epc, "name": name}
+
+        doc.submit()
+        frappe.db.commit()
+
+        return {"ok": True, "status": "submitted", "name": doc.name, "epc": epc}
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(f"submit_open_stock_entry_by_epc error: {str(e)}")
+        return {"ok": False, "error": str(e), "epc": epc, "name": name}
+
+
 def _extract_item_epcs(item):
     candidates = []
 
