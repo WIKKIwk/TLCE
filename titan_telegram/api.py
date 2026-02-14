@@ -312,7 +312,9 @@ def detect_lce_url():
 
 
 @frappe.whitelist()
-def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_items=1, only_with_epc=1):
+def get_open_stock_entry_drafts_fast(
+    modified_since=None, limit=5000, include_items=1, only_with_epc=1, compact=1
+):
     """
     Ultra-fast endpoint for RFID draft cache.
 
@@ -324,8 +326,9 @@ def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_it
     Args:
         modified_since (str|None): Optional cursor; returns drafts modified >= this value.
         limit (int): Max SQL rows returned (capped for safety).
-        include_items (int|bool): 1 to include item rows in response, 0 for compact mode.
+        include_items (int|bool): 1 to include item rows in response, 0 to skip items.
         only_with_epc (int|bool): 1 to return only drafts/items that have EPC fields.
+        compact (int|bool): 1 to return minimal draft fields for low payload.
     """
     try:
         row_limit = int(limit or 5000)
@@ -335,6 +338,7 @@ def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_it
     row_limit = max(1, min(row_limit, 20000))
     include_items_flag = str(include_items).strip().lower() not in ("0", "false", "no")
     only_with_epc_flag = str(only_with_epc).strip().lower() not in ("0", "false", "no")
+    compact_flag = str(compact).strip().lower() not in ("0", "false", "no")
     modified_since = (modified_since or "").strip() or None
 
     conditions = ["se.docstatus = 0"]
@@ -351,37 +355,54 @@ def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_it
 
     where_clause = " AND ".join(conditions)
 
-    rows = frappe.db.sql(
-        f"""
-        SELECT
-            se.name,
-            se.modified,
-            se.posting_date,
-            se.posting_time,
-            se.purpose,
-            se.from_warehouse,
-            se.to_warehouse,
-            se.remarks,
-            sed.idx,
-            sed.item_code,
-            sed.qty,
-            sed.s_warehouse,
-            sed.t_warehouse,
-            sed.barcode,
-            sed.batch_no,
-            sed.serial_no
-        FROM `tabStock Entry` se
-        LEFT JOIN `tabStock Entry Detail` sed
-            ON sed.parent = se.name
-           AND sed.parenttype = 'Stock Entry'
-           AND sed.parentfield = 'items'
-        WHERE {where_clause}
-        ORDER BY se.modified DESC, se.name DESC, sed.idx ASC
-        LIMIT %(limit)s
-        """,
-        params,
-        as_dict=True,
-    )
+    if compact_flag:
+        sql = f"""
+            SELECT
+                se.name,
+                se.modified,
+                se.remarks,
+                sed.barcode,
+                sed.batch_no,
+                sed.serial_no
+            FROM `tabStock Entry` se
+            LEFT JOIN `tabStock Entry Detail` sed
+                ON sed.parent = se.name
+               AND sed.parenttype = 'Stock Entry'
+               AND sed.parentfield = 'items'
+            WHERE {where_clause}
+            ORDER BY se.modified DESC, se.name DESC
+            LIMIT %(limit)s
+        """
+    else:
+        sql = f"""
+            SELECT
+                se.name,
+                se.modified,
+                se.posting_date,
+                se.posting_time,
+                se.purpose,
+                se.from_warehouse,
+                se.to_warehouse,
+                se.remarks,
+                sed.idx,
+                sed.item_code,
+                sed.qty,
+                sed.s_warehouse,
+                sed.t_warehouse,
+                sed.barcode,
+                sed.batch_no,
+                sed.serial_no
+            FROM `tabStock Entry` se
+            LEFT JOIN `tabStock Entry Detail` sed
+                ON sed.parent = se.name
+               AND sed.parenttype = 'Stock Entry'
+               AND sed.parentfield = 'items'
+            WHERE {where_clause}
+            ORDER BY se.modified DESC, se.name DESC, sed.idx ASC
+            LIMIT %(limit)s
+        """
+
+    rows = frappe.db.sql(sql, params, as_dict=True)
 
     drafts_map = {}
     max_modified = None
@@ -393,18 +414,18 @@ def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_it
 
         draft = drafts_map.get(name)
         if not draft:
-            draft = {
-                "name": name,
-                "modified": row.get("modified"),
-                "posting_date": row.get("posting_date"),
-                "posting_time": row.get("posting_time"),
-                "purpose": row.get("purpose"),
-                "from_warehouse": row.get("from_warehouse"),
-                "to_warehouse": row.get("to_warehouse"),
-                "remarks": row.get("remarks"),
-                "epcs": [],
-                "items": [],
-            }
+            draft = {"name": name, "modified": row.get("modified"), "remarks": row.get("remarks"), "epcs": []}
+            if not compact_flag:
+                draft.update(
+                    {
+                        "posting_date": row.get("posting_date"),
+                        "posting_time": row.get("posting_time"),
+                        "purpose": row.get("purpose"),
+                        "from_warehouse": row.get("from_warehouse"),
+                        "to_warehouse": row.get("to_warehouse"),
+                        "items": [],
+                    }
+                )
             drafts_map[name] = draft
 
         if row.get("modified"):
@@ -422,11 +443,10 @@ def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_it
             "serial_no": (row.get("serial_no") or "").strip(),
         }
 
-        if item["item_code"] and include_items_flag:
+        if not compact_flag and item["item_code"] and include_items_flag:
             draft["items"].append(item)
 
-        if item["item_code"]:
-            draft["epcs"].extend(_extract_item_epcs(item))
+        draft["epcs"].extend(_extract_item_epcs(item))
 
     drafts = []
     total_epcs = 0
@@ -448,11 +468,14 @@ def get_open_stock_entry_drafts_fast(modified_since=None, limit=5000, include_it
 
         draft["epcs"] = uniq_epcs
         draft.pop("remarks", None)
+        if not include_items_flag:
+            draft.pop("items", None)
         total_epcs += len(uniq_epcs)
         drafts.append(draft)
 
     return {
         "ok": True,
+        "compact": compact_flag,
         "count_drafts": len(drafts),
         "count_epcs": total_epcs,
         "max_modified": max_modified,
