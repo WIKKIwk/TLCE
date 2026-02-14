@@ -53,3 +53,12 @@ Response includes:
 - `count_epcs`
 - `max_modified` (cursor for next incremental fetch)
 - `drafts[]` with `name`, warehouses, `epcs[]`, and optional `items[]`
+
+Ultra-minimum payload (only EPC list):
+
+```bash
+curl -H "Authorization: token <API_KEY>:<API_SECRET>" \
+  "https://your-erp.example.com/api/method/titan_telegram.api.get_open_stock_entry_drafts_fast?modified_since=2026-02-13%2000:00:00&limit=5000&only_with_epc=1&compact=1&epc_only=1"
+```
+
+Returns: `epcs[]`, `count_epcs`, `max_modified` (and empty `drafts[]`).

@@ -313,7 +313,7 @@ def detect_lce_url():
 
 @frappe.whitelist()
 def get_open_stock_entry_drafts_fast(
-    modified_since=None, limit=5000, include_items=1, only_with_epc=1, compact=1
+    modified_since=None, limit=5000, include_items=1, only_with_epc=1, compact=1, epc_only=0
 ):
     """
     Ultra-fast endpoint for RFID draft cache.
@@ -329,6 +329,7 @@ def get_open_stock_entry_drafts_fast(
         include_items (int|bool): 1 to include item rows in response, 0 to skip items.
         only_with_epc (int|bool): 1 to return only drafts/items that have EPC fields.
         compact (int|bool): 1 to return minimal draft fields for low payload.
+        epc_only (int|bool): 1 to return only unique epcs[] (minimum payload).
     """
     try:
         row_limit = int(limit or 5000)
@@ -339,6 +340,7 @@ def get_open_stock_entry_drafts_fast(
     include_items_flag = str(include_items).strip().lower() not in ("0", "false", "no")
     only_with_epc_flag = str(only_with_epc).strip().lower() not in ("0", "false", "no")
     compact_flag = str(compact).strip().lower() not in ("0", "false", "no")
+    epc_only_flag = str(epc_only).strip().lower() not in ("0", "false", "no")
     modified_since = (modified_since or "").strip() or None
 
     conditions = ["se.docstatus = 0"]
@@ -403,6 +405,50 @@ def get_open_stock_entry_drafts_fast(
         """
 
     rows = frappe.db.sql(sql, params, as_dict=True)
+
+    if epc_only_flag:
+        seen = set()
+        epcs = []
+        draft_names = set()
+        max_modified = None
+
+        for row in rows:
+            name = row.get("name")
+            if name:
+                draft_names.add(name)
+
+            if row.get("modified"):
+                modified = str(row.get("modified"))
+                if max_modified is None or modified > max_modified:
+                    max_modified = modified
+
+            item = {
+                "barcode": (row.get("barcode") or "").strip(),
+                "batch_no": (row.get("batch_no") or "").strip(),
+                "serial_no": (row.get("serial_no") or "").strip(),
+            }
+
+            candidates = _extract_item_epcs(item)
+            remark_epc = _extract_epc_from_remarks(row.get("remarks"))
+            if remark_epc:
+                candidates.append(remark_epc)
+
+            for candidate in candidates:
+                normalized = _normalize_epc_value(candidate)
+                if normalized and normalized not in seen:
+                    seen.add(normalized)
+                    epcs.append(normalized)
+
+        return {
+            "ok": True,
+            "compact": compact_flag,
+            "epc_only": True,
+            "count_drafts": len(draft_names),
+            "count_epcs": len(epcs),
+            "max_modified": max_modified,
+            "epcs": epcs,
+            "drafts": [],
+        }
 
     drafts_map = {}
     max_modified = None
@@ -476,6 +522,7 @@ def get_open_stock_entry_drafts_fast(
     return {
         "ok": True,
         "compact": compact_flag,
+        "epc_only": False,
         "count_drafts": len(drafts),
         "count_epcs": total_epcs,
         "max_modified": max_modified,
